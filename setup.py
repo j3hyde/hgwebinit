@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+
+
 #mercurial hgweb support for repository creation.
 
 #defining features:
@@ -7,7 +10,7 @@
 # * Handle 404 for incoming changesets.
 
 
-#!/usr/bin/env python
+
 
 from distutils.core import setup
 
