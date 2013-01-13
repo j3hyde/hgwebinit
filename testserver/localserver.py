@@ -3,17 +3,15 @@
 import BaseHTTPServer
 import CGIHTTPServer
 import cgitb; cgitb.enable()  ## This line enables CGI error reporting
-from CGIHTTPServer import CGIHTTPRequestHandler
-
 
 def run():
     server = BaseHTTPServer.HTTPServer
     handler = CGIHTTPServer.CGIHTTPRequestHandler
     server_address = ("", 8000)
-    handler.cgi_directories = [""]
+    handler.cgi_directories = ["/"]
 
-httpd = server(server_address, handler)
-httpd.serve_forever()
+    httpd = server(server_address, handler)
+    httpd.serve_forever()
 
 
 

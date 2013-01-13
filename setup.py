@@ -12,7 +12,7 @@
 
 
 
-from distutils.core import setup
+from setuptools import setup
 
 setup(name='hgweb-init',
       version='1.0dev',
@@ -21,4 +21,5 @@ setup(name='hgweb-init',
       author_email='jkyllo@echospiral.com',
       url='https://echospiral.com/trac/hgweb-init',
       packages=['hgwebinit'],
+      package_dir={'hgwebinit': 'src'}
      )
