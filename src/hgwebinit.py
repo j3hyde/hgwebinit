@@ -26,25 +26,20 @@ def handle_repo_creation(obj, req):
     
 
     # we need to get the hgweb config so refresh first
-    print 'obj.refresh()'
     obj.refresh()
     
     # Determine the need for creation
-    print 'get virtual'
     virtual = req.env.get("PATH_INFO", "").strip('/')
     
     # is this a request for a (non-existent) repo?
-    print 'check for static'
     if virtual.startswith('static/') or 'static' in req.form:
         return
     
     # this is a request for the top level index?
-    print 'non-virtual'
     if not virtual:
         return
     
     # is this a request for nested repos and hgwebs?
-    print 'Check for repos'
     repos = dict(obj.repos)
     virtualrepo = virtual
     while virtualrepo:
@@ -58,7 +53,6 @@ def handle_repo_creation(obj, req):
 
         
     # is this a request for subdirectories?
-    print 'Check for subdirs'
     subdir = virtual + '/'
     if [r for r in repos if r.startswith(subdir)]:
         return
@@ -75,7 +69,6 @@ def handle_repo_creation(obj, req):
     
 
     # Ah, but is this user allowed to create repos?
-    print 'create_allowed()'
     if not create_allowed(obj.ui, req):
         print 'not allowed: %s' % req.env.get('REMOTE_USER')
         return
@@ -88,7 +81,6 @@ def handle_repo_creation(obj, req):
     # if it doesn't fall into a configured collections or subrepo, then deny with 401
     
     # init the repo
-    print 'creating repository at path: %s' % virtual
     
     #hg.repository(obj.ui, path=virtual, create=True)
 
@@ -229,11 +221,24 @@ class UiMock(object):
 class RequestMock(object):
     '''A simple Mock for hg's Request object.  It allows access to environment
     variables.'''
-    def __init__(self, env=None):
+    def __init__(self, env=None, form=None):
         self.env = env
         if env is None:
             self.env = {}
+            
+        self.form = form
+        if form is None:
+            self.form = {}
+        
+
+class ModuleMock(object):
+    def __init__(self, ui):
+        self.ui = ui
+        self.repos = []
     
+    def refresh(self):
+        pass
+
 class NewRepositoryTests(TempDirTestCase):
     '''Tests for creation of new repositories.'''
     def setUp(self):
@@ -293,10 +298,48 @@ class NewRepositoryTests(TempDirTestCase):
                                               'wsgi.url_scheme': 'https'
                                               }))
         
-    def testStaticPathRequest(self):
+    def testNonRepoPathRequests(self):
         '''Given a URL for static resources, ensure the extension returns
         without creating a repo.'''
-        self.assertTrue(False)
+                
+        req = RequestMock(env={
+                          'REMOTE_USER': 'allow_user',
+                          'REQUEST_METHOD': 'GET',
+                          'wsgi.url_scheme': 'http'
+                          })
+        
+        # static request
+        req.env['PATH_INFO'] = '/static/mystylesheet.css'
+        m = ModuleMock(self.ui)
+        handle_repo_creation(m, req)
+        self.assertEqual([], m.repos)
+        
+        req.form['static'] = True
+        m = ModuleMock(self.ui)
+        handle_repo_creation(m, req)
+        self.assertEqual([], m.repos)
+        
+        # top-level index request
+        req.env['PATH_INFO'] = '/'
+        m = ModuleMock(self.ui)
+        handle_repo_creation(m, req)
+        self.assertEqual([], m.repos)
+        
+        # repo request
+        req.env['PATH_INFO'] = '/trunk/test1/'
+        m = ModuleMock(self.ui)
+        repos = ['trunk/test1']
+        m.repos += repos
+        handle_repo_creation(m, req)
+        self.assertEqual(repos, m.repos)
+        
+        # repo subdir request
+        req.env['PATH_INFO'] = '/trunk/test1/howdy.txt'
+        m = ModuleMock(self.ui)
+        repos = ['trunk/test1']
+        m.repos += repos
+        handle_repo_creation(m, req)
+        self.assertEqual(repos, m.repos)
     
     def testRepoPathRequest(self):
         '''Given a request for a Repo, ensure the extension returns without
