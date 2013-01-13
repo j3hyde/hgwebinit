@@ -138,20 +138,8 @@ def create_allowed(ui, req):
 
     user = req.env.get('REMOTE_USER')
     
-    allowpull = ui.configbool('web', 'allowpull')
+    allowpull = ui.configbool('web', 'allow_pull')
 
-    deny_read = ui.configlist('web', 'deny_read')
-    if deny_read and (not user or deny_read == ['*'] or user in deny_read):
-        raise ErrorResponse(HTTP_UNAUTHORIZED, 'read not authorized')
-
-    allow_read = ui.configlist('web', 'allow_read')
-    result = (not allow_read) or (allow_read == ['*'])
-    if not (result or user in allow_read):
-        raise ErrorResponse(HTTP_UNAUTHORIZED, 'read not authorized')
-
-    if not allowpull:
-        raise ErrorResponse(HTTP_UNAUTHORIZED, 'pull not authorized')
-    
     # enforce that you can only push using POST requests
     if req.env['REQUEST_METHOD'] != 'POST':
         msg = 'push requires POST request'
@@ -175,16 +163,16 @@ def create_allowed(ui, req):
 
     deny_create = ui.configlist('web', 'deny_create', untrusted=True)
     if deny_create and (not user or deny_create == ['*'] or user in deny_create):
-        return False
+        raise ErrorResponse(HTTP_UNAUTHORIZED, 'create not authorized')
 
     allow_create = ui.configlist('web', 'allow_create', untrusted=True)
-    # by default, den creating if no allow_create option has been set
-    if (allow_create == ['*']) or (user in allow_create):
-        return True
+    result = (allow_create == ['*']) or (user in allow_create)
+    if not result:
+        raise ErrorResponse(HTTP_UNAUTHORIZED, 'create not authorized')
 
     # TODO: need a check to ensure requested path is within configured collections.
 
-    return False
+    return True
 
 
 
@@ -227,13 +215,20 @@ class UiMock(object):
     def __init__(self, config):
         self.config = config
         
-    def configlist(self, section, name, default=None):
+    def configlist(self, section, name, default=[], untrusted=False):
         key = '%s:%s' % (section, name)
-        if self.config.has_key(key):
-            return self.config[key]
-        else:
-            return default
+        val = self.config.get(key, default)
+        if type(val) != list:
+            val = [val]
+            
+        print 'configlist(%s)=%s' % (key, val)
+        return val
     
+    def configbool(self, section, name, default=False, untrusted=False):
+        key = '%s:%s' % (section, name)
+        print 'configbool(%s)' % key
+        return self.config.get(key, default)
+        
 class RequestMock(object):
     '''A simple Mock for hg's Request object.  It allows access to environment
     variables.'''
@@ -246,24 +241,56 @@ class NewRepositoryTests(TempDirTestCase):
     '''Tests for creation of new repositories.'''
     def setUp(self):
         '''Set up some baseline configuration for hgwebinit.'''
+        TempDirTestCase.setUp(self)
         self.ui = UiMock({
                           'web:deny_create': ['deny_user'],
                           'web:allow_create': ['allow_user'],
+                          'web:allow_push': '*'
                           })
     
     def tearDown(self):
         '''Teardown.'''
         TempDirTestCase.tearDown(self)
     
+    def testDenyNoSsl(self):
+        self.assertRaises(ErrorResponse, create_allowed, self.ui, RequestMock(env={
+                                              'REMOTE_USER': 'allow2_user',
+                                              'REQUEST_METHOD': 'POST',
+                                              'wsgi.url_scheme': 'http'
+                                              }))
+    
+    def testDenyHttpGet(self):
+        self.assertRaises(ErrorResponse, create_allowed, self.ui, RequestMock(env={
+                                              'REMOTE_USER': 'allow2_user',
+                                              'REQUEST_METHOD': 'GET',
+                                              'wsgi.url_scheme': 'https'
+                                              }))
+    
     def testDenyCreate(self):
-        self.assertFalse(create_allowed(self.ui, RequestMock(env={'REMOTE_USER': 'deny_user'})))
+        self.assertRaises(ErrorResponse, create_allowed, self.ui, RequestMock(env={
+                                              'REMOTE_USER': 'deny_user',
+                                              'REQUEST_METHOD': 'POST',
+                                              'wsgi.url_scheme': 'https'
+                                              }))
     
     def testAllowCreate(self):
-        self.assertTrue(create_allowed(self.ui, RequestMock(env={'REMOTE_USER': 'allow_user'})))
+        self.assertTrue(create_allowed(self.ui, RequestMock(env={
+                                             'REMOTE_USER': 'allow_user',
+                                              'REQUEST_METHOD': 'POST',
+                                              'wsgi.url_scheme': 'https'
+                                              })))
     
     def testDefaultCreate(self):
-        self.assertFalse(create_allowed(self.ui, RequestMock(env={'REMOTE_USER': 'allow2_user'})))
-        self.assertFalse(create_allowed(self.ui, RequestMock(env={'REMOTE_USER': 'deny2_user'})))
+        self.assertFalse(create_allowed(self.ui, RequestMock(env={
+                                              'REMOTE_USER': 'allow2_user',
+                                              'REQUEST_METHOD': 'POST',
+                                              'wsgi.url_scheme': 'https'
+                                              })))
+        self.assertFalse(create_allowed(self.ui, RequestMock(env={
+                                              'REMOTE_USER': 'deny2_user',
+                                              'REQUEST_METHOD': 'POST',
+                                              'wsgi.url_scheme': 'https'
+                                              })))
         
     def testStaticPathRequest(self):
         '''Given a URL for static resources, ensure the extension returns
