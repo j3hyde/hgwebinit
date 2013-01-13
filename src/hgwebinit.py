@@ -347,4 +347,12 @@ class NewRepositoryTests(TempDirTestCase):
     def testNonPushRequest(self):
         '''For an otherwise acceptable, but non-push request, ensure the
         extension returns without creating a repo.'''
-        self.assertTrue(False) 
+        self.assertTrue(False)
+        
+    def testCreateOnCollection(self):
+        '''Allow for creation of repos within collections.'''
+        self.assertTrue(False)
+        
+    def testCreateSubRepos(self):
+        '''Allow for creation of sub-repos.'''
+        self.assertTrue(False)
