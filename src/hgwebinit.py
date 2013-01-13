@@ -130,8 +130,6 @@ def create_allowed(ui, req):
 
     user = req.env.get('REMOTE_USER')
     
-    allowpull = ui.configbool('web', 'allow_pull')
-
     # enforce that you can only push using POST requests
     if req.env['REQUEST_METHOD'] != 'POST':
         msg = 'push requires POST request'
