@@ -220,13 +220,10 @@ class UiMock(object):
         val = self.config.get(key, default)
         if type(val) != list:
             val = [val]
-            
-        print 'configlist(%s)=%s' % (key, val)
         return val
     
     def configbool(self, section, name, default=False, untrusted=False):
         key = '%s:%s' % (section, name)
-        print 'configbool(%s)' % key
         return self.config.get(key, default)
         
 class RequestMock(object):
@@ -281,28 +278,32 @@ class NewRepositoryTests(TempDirTestCase):
                                               })))
     
     def testDefaultCreate(self):
-        self.assertFalse(create_allowed(self.ui, RequestMock(env={
+        '''Test the case where the authenticated user isn't the list for either 
+        of allow_create or deny_create but everything else passes.  The user
+        should be denied, by default, from create a new repository.  Only 
+        explicit permission will get the job done.'''
+        self.assertRaises(ErrorResponse, create_allowed, self.ui, RequestMock(env={
                                               'REMOTE_USER': 'allow2_user',
                                               'REQUEST_METHOD': 'POST',
                                               'wsgi.url_scheme': 'https'
-                                              })))
-        self.assertFalse(create_allowed(self.ui, RequestMock(env={
+                                              }))
+        self.assertRaises(ErrorResponse, create_allowed, self.ui, RequestMock(env={
                                               'REMOTE_USER': 'deny2_user',
                                               'REQUEST_METHOD': 'POST',
                                               'wsgi.url_scheme': 'https'
-                                              })))
+                                              }))
         
     def testStaticPathRequest(self):
         '''Given a URL for static resources, ensure the extension returns
         without creating a repo.'''
-        pass
+        self.assertTrue(False)
     
     def testRepoPathRequest(self):
         '''Given a request for a Repo, ensure the extension returns without
         creating a repo.'''
-        pass
+        self.assertTrue(False)
     
     def testNonPushRequest(self):
         '''For an otherwise acceptable, but non-push request, ensure the
         extension returns without creating a repo.'''
-        pass 
+        self.assertTrue(False) 
