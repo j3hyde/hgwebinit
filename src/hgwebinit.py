@@ -11,11 +11,16 @@ import shutil
 import tempfile
 import unittest
 
-from mercurial import hg, extensions, encoding, templater, ui
+from mercurial import hg, extensions, encoding, templater
 from mercurial.hgweb import hgwebdir_mod
 from mercurial.hgweb.common import ErrorResponse, HTTP_UNAUTHORIZED
 from mercurial.hgweb.common import HTTP_METHOD_NOT_ALLOWED, HTTP_FORBIDDEN
 
+def getLocalPathForVirtual(ui, path):
+    pass
+
+def path_is_a_repo(ui, path):
+    pass
 
 def should_create_repo(obj, req):   
     """Check if the requested repository exists and if this is a push request.
@@ -316,13 +321,25 @@ class RepoDetectionTests(TempDirTestCase):
     def setUp(self):
         '''Set up some baseline configuration for hgwebinit.'''
         TempDirTestCase.setUp(self)
+        
+        import os.path
+        
+        collectiondir = self.make_temp_dir()
+        manycollectiondir = self.make_temp_dir()
+        tmprepo = self.make_temp_dir()
+        
         self.default_config = {
-                              'web': {
-                                  'deny_create': ['deny_user'],
-                                  'allow_create': ['allow_user'],
-                                  'allow_push': '*'
-                                  }
-                               }
+            'web': {
+                'deny_create': ['deny_user'],
+                'allow_create': ['allow_user'],
+                'allow_push': '*'
+            },
+            'paths': {
+                '/trunk2/short' : os.path.join(collectiondir, '*'),
+                '/trunk2/many' : os.path.join(manycollectiondir, '**'),
+                '/trunk1' : tmprepo
+            }
+        }
         self.ui = UiMock(config=self.default_config)
     
     def tearDown(self):
@@ -375,20 +392,10 @@ class RepoDetectionTests(TempDirTestCase):
                           'REMOTE_USER': 'allow_user',
                           'REQUEST_METHOD': 'GET',
                           'wsgi.url_scheme': 'http',
-                          'PATH_INFO': '/trunk'
+                          'PATH_INFO': '/trunk1'
                           })
         
-        tmprepo = self.make_temp_dir()
-        ui = UiMock(config={'web': {
-                              'deny_create': ['deny_user'],
-                              'allow_create': ['allow_user'],
-                              'allow_push': '*'
-                            },
-                     'paths': {
-                               '/trunk' : tmprepo
-                               }
-                     })
-        m = ModuleMock(ui)
+        m = ModuleMock(self.ui)
         self.assertFalse(should_create_repo(m, req))
         
     
@@ -401,50 +408,32 @@ class RepoDetectionTests(TempDirTestCase):
         '''Allow for creation of repos within collections.
         Note: This is relying on repo detection to prevent a new repo from being
         created at the location of an existing one.'''
-        import os.path
-        
-        collectiondir = self.make_temp_dir()
-        manycollectiondir = self.make_temp_dir()
-        
-        mockui = UiMock(config={
-                          'web': {
-                              'deny_create': ['deny_user'],
-                              'allow_create': ['allow_user'],
-                              'allow_push': '*'
-                              },
-                          'paths': {
-                              '/trunk/short' : os.path.join(collectiondir, '*'),
-                              '/trunk/many' : os.path.join(manycollectiondir, '**')
-                              }
-                         })
-        
-        
+                
         req = RequestMock(env={
                           'REMOTE_USER': 'allow_user',
                           'REQUEST_METHOD': 'POST',
-                          'wsgi.url_scheme': 'https',
-                          'PATH_INFO': '/trunk'
+                          'wsgi.url_scheme': 'https'
                           })
+        m = ModuleMock(self.ui)
         
         # Don't create a new repo at /trunk
-        m = ModuleMock(mockui)
+        req.env['PATH_INFO'] = '/trunk2'
         self.assertFalse(should_create_repo(m, req))
         
         # Do create a new repo at /trunk/short/test1
-        req.env['PATH_INFO'] = '/trunk/short/test1'
+        req.env['PATH_INFO'] = '/trunk2/short/test1'
         self.assertTrue(should_create_repo(m, req))
         
         # Do not create a new repo at /trunk/short/test2/test2
-        req.env['PATH_INFO'] = '/trunk/short/test2/test2'
-        m = ModuleMock(ui)
+        req.env['PATH_INFO'] = '/trunk2/short/test2/test2'
         self.assertFalse(should_create_repo(m, req))
         
         # Do create a new repo at /trunk/many/test3
-        req.env['PATH_INFO'] = '/trunk/many/test3'
+        req.env['PATH_INFO'] = '/trunk2/many/test3'
         self.assertTrue(should_create_repo(m, req))
         
         # Do create a new repo at /trunk/many/test4/test4
-        req.env['PATH_INFO'] = '/trunk/many/test4/test4'
+        req.env['PATH_INFO'] = '/trunk2/many/test4/test4'
         self.assertTrue(should_create_repo(m, req))
         
     def testCreateSubRepos(self):
