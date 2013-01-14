@@ -357,6 +357,7 @@ class RepoDetectionTests(TempDirTestCase):
         TempDirTestCase.tearDown(self)
         
     def testPath(self, path, mod=None, req=None):
+        print '%s, %s, %s, %s' % (self, path, mod, req)
         if mod is None:
             mod = self.mod
             
@@ -390,7 +391,7 @@ class RepoDetectionTests(TempDirTestCase):
         
         # repo request (no)
         m = ModuleMock(self.ui)
-        repos = ['trunk/test1']
+        repos = [('trunk/test1', '')]
         m.repos += repos
         self.assertFalse(self.testPath('/trunk/test1/', mod=m))
         
