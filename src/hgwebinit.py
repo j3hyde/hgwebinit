@@ -19,12 +19,8 @@ from mercurial.hgweb.common import HTTP_METHOD_NOT_ALLOWED, HTTP_FORBIDDEN
 
 def should_create_repo(obj, req):   
     """Check if the requested repository exists and if this is a push request.
-    If so, then check if the user is allowed to create repositories, prompt to 
-    create it, and do so if asked.
+    """
     
-    In general, behave like hgwebdir_mod if at all possible."""
-    
-
     # we need to get the hgweb config so refresh first
     obj.refresh()
     
@@ -65,15 +61,7 @@ def should_create_repo(obj, req):
     #  * list_keys (namespace=phases)
     #  * list_keys (namespace=bookmarks)
     
-    # our capabilities are pretty much just unbundle until created...?
-    
-
-    # Ah, but is this user allowed to create repos?
-    if not create_allowed(obj.ui, req):
-        print 'not allowed: %s' % req.env.get('REMOTE_USER')
-        return False
-    
-    
+    # our capabilities are pretty much just unbundle until created...?    
     
     # If we've made it this far then we need to create a repo
     
@@ -100,13 +88,15 @@ def hgwebinit_run_wsgi_wrapper(orig, obj, req):
         
         # Do our stuff...
         if should_create_repo(obj, req):
-            virtual = req.env.get("PATH_INFO", "").strip('/') 
-            hg.repository(obj.ui, path=virtual, create=True)
-            # force refresh
-            obj.lastrefresh = 0    
-            # add it to hgwebdir_mod? or have them push again?
-            # obj.repos.append(virtual)
-            
+            # Ah, but is this user allowed to create repos?
+            if create_allowed(obj.ui, req):
+                virtual = req.env.get("PATH_INFO", "").strip('/') 
+                hg.repository(obj.ui, path=virtual, create=True)
+                # force refresh
+                obj.lastrefresh = 0    
+                # add it to hgwebdir_mod? or have them push again?
+                # obj.repos.append(virtual)
+                
     except ErrorResponse, err:
         req.respond(err, ctype)
         return tmpl('error', error=err.message or '')
@@ -255,8 +245,8 @@ class ModuleMock(object):
     def refresh(self):
         pass
 
-class NewRepositoryTests(TempDirTestCase):
-    '''Tests for creation of new repositories.'''
+class PermissionCheckTests(TempDirTestCase):
+    '''Tests for user/client/connection permission to create repositories.'''
     def setUp(self):
         '''Set up some baseline configuration for hgwebinit.'''
         TempDirTestCase.setUp(self)
@@ -316,7 +306,26 @@ class NewRepositoryTests(TempDirTestCase):
                                               'REQUEST_METHOD': 'POST',
                                               'wsgi.url_scheme': 'https'
                                               }))
-        
+
+class RepoDetectionTests(TempDirTestCase):
+    '''Tests for whether a repo should be created.'''
+    
+    def setUp(self):
+        '''Set up some baseline configuration for hgwebinit.'''
+        TempDirTestCase.setUp(self)
+        self.default_config = {
+                              'web': {
+                                  'deny_create': ['deny_user'],
+                                  'allow_create': ['allow_user'],
+                                  'allow_push': '*'
+                                  }
+                               }
+        self.ui = UiMock(config=self.default_config)
+    
+    def tearDown(self):
+        '''Teardown.'''
+        TempDirTestCase.tearDown(self)
+    
     def testNonRepoPathRequests(self):
         '''Given a URL for static resources, ensure the extension returns
         without creating a repo.'''
