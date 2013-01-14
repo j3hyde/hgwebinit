@@ -53,6 +53,10 @@ def should_create_repo(obj, req):
     if [r for r in repos if r.startswith(subdir)]:
         return False
 
+
+    # TODO: need a check to ensure requested path is within configured collections.
+
+
     # Okay, but should we proceed?  (basically restrict to push requests)
     # Push will do:
     #  * capabilities
@@ -64,11 +68,6 @@ def should_create_repo(obj, req):
     # our capabilities are pretty much just unbundle until created...?    
     
     # If we've made it this far then we need to create a repo
-    
-    # determine physical path based on config (paths setting)
-    # if it doesn't fall into a configured collections or subrepo, then deny with 401
-    
-    # init the repo
     
     return True
 
@@ -90,8 +89,14 @@ def hgwebinit_run_wsgi_wrapper(orig, obj, req):
         if should_create_repo(obj, req):
             # Ah, but is this user allowed to create repos?
             if create_allowed(obj.ui, req):
+                # determine physical path based on config (paths setting)
+                # if it doesn't fall into a configured collections or subrepo, then deny with 401
                 virtual = req.env.get("PATH_INFO", "").strip('/') 
-                hg.repository(obj.ui, path=virtual, create=True)
+                
+                    
+                # init the repo
+                print 'create repo at path=%s' % virtual
+                #hg.repository(obj.ui, path=virtual, create=True)
                 # force refresh
                 obj.lastrefresh = 0    
                 # add it to hgwebdir_mod? or have them push again?
@@ -151,8 +156,6 @@ def create_allowed(ui, req):
     result = (allow_create == ['*']) or (user in allow_create)
     if not result:
         raise ErrorResponse(HTTP_UNAUTHORIZED, 'create not authorized')
-
-    # TODO: need a check to ensure requested path is within configured collections.
 
     return True
 
