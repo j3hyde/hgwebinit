@@ -17,7 +17,7 @@ from mercurial.hgweb.common import ErrorResponse, HTTP_UNAUTHORIZED
 from mercurial.hgweb.common import HTTP_METHOD_NOT_ALLOWED, HTTP_FORBIDDEN
 
 
-def handle_repo_creation(obj, req):   
+def should_create_repo(obj, req):   
     """Check if the requested repository exists and if this is a push request.
     If so, then check if the user is allowed to create repositories, prompt to 
     create it, and do so if asked.
@@ -33,11 +33,11 @@ def handle_repo_creation(obj, req):
     
     # is this a request for a (non-existent) repo?
     if virtual.startswith('static/') or 'static' in req.form:
-        return
+        return False
     
     # this is a request for the top level index?
     if not virtual:
-        return
+        return False
     
     # is this a request for nested repos and hgwebs?
     repos = dict(obj.repos)
@@ -45,7 +45,7 @@ def handle_repo_creation(obj, req):
     while virtualrepo:
         real = repos.get(virtualrepo)
         if real:
-            return
+            return False
         up = virtualrepo.rfind('/')
         if up < 0:
             break
@@ -55,7 +55,7 @@ def handle_repo_creation(obj, req):
     # is this a request for subdirectories?
     subdir = virtual + '/'
     if [r for r in repos if r.startswith(subdir)]:
-        return
+        return False
 
     # Okay, but should we proceed?  (basically restrict to push requests)
     # Push will do:
@@ -71,7 +71,7 @@ def handle_repo_creation(obj, req):
     # Ah, but is this user allowed to create repos?
     if not create_allowed(obj.ui, req):
         print 'not allowed: %s' % req.env.get('REMOTE_USER')
-        return
+        return False
     
     
     
@@ -82,13 +82,8 @@ def handle_repo_creation(obj, req):
     
     # init the repo
     
-    hg.repository(obj.ui, path=virtual, create=True)
+    return True
 
-    # force another refresh
-    obj.lastrefresh = 0    
-    #obj.refresh()
-    # add it to hgwebdir_mod? or have them push again?
-    
     
 
     
@@ -104,7 +99,14 @@ def hgwebinit_run_wsgi_wrapper(orig, obj, req):
         ctype = templater.stringify(ctype)
         
         # Do our stuff...
-        handle_repo_creation(obj, req)
+        if should_create_repo(obj, req):
+            virtual = req.env.get("PATH_INFO", "").strip('/') 
+            hg.repository(obj.ui, path=virtual, create=True)
+            # force refresh
+            obj.lastrefresh = 0    
+            # add it to hgwebdir_mod? or have them push again?
+            # obj.repos.append(virtual)
+            
     except ErrorResponse, err:
         req.respond(err, ctype)
         return tmpl('error', error=err.message or '')
@@ -325,38 +327,33 @@ class NewRepositoryTests(TempDirTestCase):
                           'wsgi.url_scheme': 'http'
                           })
         
-        # static request
+        # static requests (no)
         req.env['PATH_INFO'] = '/static/mystylesheet.css'
         m = ModuleMock(self.ui)
-        handle_repo_creation(m, req)
-        self.assertEqual([], m.repos)
+        self.assertFalse(should_create_repo(m, req))
         
         req.form['static'] = True
         m = ModuleMock(self.ui)
-        handle_repo_creation(m, req)
-        self.assertEqual([], m.repos)
+        self.assertFalse(should_create_repo(m, req))
         
-        # top-level index request
+        # top-level index request (no)
         req.env['PATH_INFO'] = '/'
         m = ModuleMock(self.ui)
-        handle_repo_creation(m, req)
-        self.assertEqual([], m.repos)
+        self.assertFalse(should_create_repo(m, req))
         
-        # repo request
+        # repo request (no)
         req.env['PATH_INFO'] = '/trunk/test1/'
         m = ModuleMock(self.ui)
         repos = ['trunk/test1']
         m.repos += repos
-        handle_repo_creation(m, req)
-        self.assertEqual(repos, m.repos)
+        self.assertFalse(should_create_repo(m, req))
         
-        # repo subdir request
+        # repo subdir request (no)
         req.env['PATH_INFO'] = '/trunk/test1/howdy.txt'
         m = ModuleMock(self.ui)
         repos = ['trunk/test1']
         m.repos += repos
-        handle_repo_creation(m, req)
-        self.assertEqual(repos, m.repos)
+        self.assertFalse(should_create_repo(m, req))
     
     def testRepoPathRequest(self):
         '''Given a request for an existing Repo, ensure the extension returns 
@@ -380,9 +377,7 @@ class NewRepositoryTests(TempDirTestCase):
                                }
                      })
         m = ModuleMock(ui)
-        repos = list(m.repos)
-        handle_repo_creation(m, req)
-        self.assertEqual(repos, m.repos)
+        self.assertFalse(should_create_repo(m, req))
         
     
     def testNonPushRequest(self):
@@ -421,34 +416,24 @@ class NewRepositoryTests(TempDirTestCase):
         
         # Don't create a new repo at /trunk
         m = ModuleMock(mockui)
-        repos = list(m.repos)
-        handle_repo_creation(m, req)
-        self.assertEqual(repos, m.repos)
+        self.assertFalse(should_create_repo(m, req))
         
         # Do create a new repo at /trunk/short/test1
         req.env['PATH_INFO'] = '/trunk/short/test1'
-        repos = list(m.repos)
-        handle_repo_creation(m, req)
-        self.assertEqual(repos + ['/trunk/short/test1'], m.repos)
+        self.assertTrue(should_create_repo(m, req))
         
         # Do not create a new repo at /trunk/short/test2/test2
         req.env['PATH_INFO'] = '/trunk/short/test2/test2'
         m = ModuleMock(ui)
-        repos = list(m.repos)
-        handle_repo_creation(m, req)
-        self.assertEqual(repos, m.repos)
+        self.assertFalse(should_create_repo(m, req))
         
         # Do create a new repo at /trunk/many/test3
         req.env['PATH_INFO'] = '/trunk/many/test3'
-        repos = list(m.repos)
-        handle_repo_creation(m, req)
-        self.assertEqual(repos + ['/trunk/many/test3'], m.repos)
+        self.assertTrue(should_create_repo(m, req))
         
         # Do create a new repo at /trunk/many/test4/test4
         req.env['PATH_INFO'] = '/trunk/many/test4/test4'
-        repos = list(m.repos)
-        handle_repo_creation(m, req)
-        self.assertEqual(repos + ['/trunk/many/test4/test4'], m.repos)
+        self.assertTrue(should_create_repo(m, req))
         
     def testCreateSubRepos(self):
         '''Allow for creation of sub-repos.'''
