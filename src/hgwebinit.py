@@ -316,7 +316,8 @@ class PermissionCheckTests(TempDirTestCase):
                                               }))
 
 class RepoDetectionTests(TempDirTestCase):
-    '''Tests for whether a repo should be created.'''
+    '''Tests for whether a repo should be created.  Assumes that request
+    parameters are normal (POST with SSL).'''
     
     def setUp(self):
         '''Set up some baseline configuration for hgwebinit.'''
@@ -340,49 +341,64 @@ class RepoDetectionTests(TempDirTestCase):
                 '/trunk1' : tmprepo
             }
         }
+        
+        self.req = RequestMock(env={
+            'REMOTE_USER': 'allow_user',
+            'REQUEST_METHOD': 'POST',
+            'wsgi.url_scheme': 'https'
+        })
+        
         self.ui = UiMock(config=self.default_config)
+        
+        self.mod = ModuleMock(self.ui)
     
     def tearDown(self):
         '''Teardown.'''
         TempDirTestCase.tearDown(self)
+        
+    def testPath(self, path, mod=None, req=None):
+        if mod is None:
+            mod = self.mod
+            
+        if req is None:
+            req = self.req
+        
+        req.env['PATH_INFO'] = path
+        return should_create_repo(mod, req)
     
     def testNonRepoPathRequests(self):
         '''Given a URL for static resources, ensure the extension returns
         without creating a repo.'''
                 
-        req = RequestMock(env={
-                          'REMOTE_USER': 'allow_user',
-                          'REQUEST_METHOD': 'GET',
-                          'wsgi.url_scheme': 'http'
-                          })
+        
         
         # static requests (no)
-        req.env['PATH_INFO'] = '/static/mystylesheet.css'
-        m = ModuleMock(self.ui)
-        self.assertFalse(should_create_repo(m, req))
+        self.assertFalse(self.testPath('/static/mystylesheet.css'))
         
-        req.form['static'] = True
-        m = ModuleMock(self.ui)
-        self.assertFalse(should_create_repo(m, req))
+        req = RequestMock(env={
+                          'REMOTE_USER': 'allow_user',
+                          'REQUEST_METHOD': 'POST',
+                          'wsgi.url_scheme': 'https'
+                          },
+                          form={
+                                'static': True
+                          })
+        self.assertFalse(self.testPath('/', req=req))
         
         # top-level index request (no)
-        req.env['PATH_INFO'] = '/'
-        m = ModuleMock(self.ui)
-        self.assertFalse(should_create_repo(m, req))
+        self.assertFalse(self.testPath('/'))
         
         # repo request (no)
-        req.env['PATH_INFO'] = '/trunk/test1/'
         m = ModuleMock(self.ui)
         repos = ['trunk/test1']
         m.repos += repos
-        self.assertFalse(should_create_repo(m, req))
+        self.assertFalse(self.testPath('/trunk/test1/', mod=m))
         
         # repo subdir request (no)
-        req.env['PATH_INFO'] = '/trunk/test1/howdy.txt'
         m = ModuleMock(self.ui)
         repos = ['trunk/test1']
         m.repos += repos
-        self.assertFalse(should_create_repo(m, req))
+        self.assertFalse(self.testPath('/trunk/test1/howdy.txt', mod=m))
     
     def testRepoPathRequest(self):
         '''Given a request for an existing Repo, ensure the extension returns 
@@ -409,32 +425,22 @@ class RepoDetectionTests(TempDirTestCase):
         Note: This is relying on repo detection to prevent a new repo from being
         created at the location of an existing one.'''
                 
-        req = RequestMock(env={
-                          'REMOTE_USER': 'allow_user',
-                          'REQUEST_METHOD': 'POST',
-                          'wsgi.url_scheme': 'https'
-                          })
-        m = ModuleMock(self.ui)
+        
         
         # Don't create a new repo at /trunk
-        req.env['PATH_INFO'] = '/trunk2'
-        self.assertFalse(should_create_repo(m, req))
+        self.assertFalse(self.testPath('/trunk2'))
         
         # Do create a new repo at /trunk/short/test1
-        req.env['PATH_INFO'] = '/trunk2/short/test1'
-        self.assertTrue(should_create_repo(m, req))
+        self.assertTrue(self.testPath('/trunk2/short/test1'))
         
         # Do not create a new repo at /trunk/short/test2/test2
-        req.env['PATH_INFO'] = '/trunk2/short/test2/test2'
-        self.assertFalse(should_create_repo(m, req))
+        self.assertFalse(self.testPath('/trunk2/short/test2/test2'))
         
         # Do create a new repo at /trunk/many/test3
-        req.env['PATH_INFO'] = '/trunk2/many/test3'
-        self.assertTrue(should_create_repo(m, req))
+        self.assertTrue(self.testPath('/trunk2/many/test3'))
         
         # Do create a new repo at /trunk/many/test4/test4
-        req.env['PATH_INFO'] = '/trunk2/many/test4/test4'
-        self.assertTrue(should_create_repo(m, req))
+        self.assertTrue(self.testPath('/trunk2/many/test4/test4'))
         
     def testCreateSubRepos(self):
         '''Allow for creation of sub-repos.'''
