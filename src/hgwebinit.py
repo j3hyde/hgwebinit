@@ -59,7 +59,7 @@ def should_create_repo(obj, req):
         return False
 
 
-    # TODO: need a check to ensure requested path is within configured collections.
+    # Check to ensure requested path is within configured collections.
     if not path_is_in_collection(virtual, repos):
         return False
 
@@ -92,10 +92,7 @@ def hgwebinit_run_wsgi_wrapper(orig, obj, req):
         if should_create_repo(obj, req):
             # Ah, but is this user allowed to create repos?
             if create_allowed(obj.ui, req):
-                # determine physical path based on config (paths setting)
-                # if it doesn't fall into a configured collections or subrepo, then deny with 401
                 virtual = req.env.get("PATH_INFO", "").strip('/') 
-                
                     
                 # init the repo
                 print 'TODO: create repo at path=%s' % virtual
@@ -163,6 +160,25 @@ def create_allowed(ui, req):
     return True
 
 
+def path_is_subrepo(path, conf_paths):
+    for virt in conf_paths:
+        local = conf_paths[virt]
+        
+        # Skip if the path is an exact match
+        if path == virt:
+            continue
+        
+        # Skip if this configured path is a collection
+        if local.endswith('**') or local.endswith('*'):
+            continue
+        
+        # Check if the path is in this collection
+        if path.startswith(virt):
+            return True
+      
+    # After checking all the configured collections, there was no match  
+    return False
+
 def path_is_in_collection(path, conf_paths):
     '''Checks if path is contained within a set of given collection paths.  A 
     path is considered to be contained only if it is in a collection and only if
@@ -196,6 +212,30 @@ def path_is_in_collection(path, conf_paths):
     # After checking all the configured collections, there was no match  
     return False
 
+def local_path_for_repo(path, conf_paths):
+    import os.path
+    
+    for virt in conf_paths:
+        local = conf_paths[virt]
+        
+        # We can't put a repo at the root of a collection
+        if local.endswith('*') and path == virt:
+            continue
+        
+        # Let's not confuse collection paths
+        if local.endswith('**'):
+            local = local[:-3]
+        elif local.endswith('*'):
+            local = local[:-2]
+            
+        # Return the local path for the virtual one
+        if path.startswith(virt):
+            p = os.path.normpath(path)
+            l = p.replace(os.path.normpath(virt), local, 1)
+            return l
+      
+    # After checking all the configured collections, there was no match  
+    return None
 
 
 # Tests...
@@ -489,12 +529,85 @@ class RepoDetectionTests(TempDirTestCase):
         #self.assertTrue(self.checkPath('/trunk2/many/test4/test4'))
         self.assertTrue(self.checkInCollection('/trunk2/many/test4/test4'))
         
-    def testChildOnNonCollection(self):
+    def testNonCollectionConflict(self):
         self.assertFalse(self.checkInCollection('/trunk1'))
         
     def testChildAtRoot(self):
         self.assertFalse(self.checkInCollection('/test1'))
         
-    def testChildInRepo(self):
-        '''Allow for creation of sub-repos.'''
+    def testSubRepo(self):
+        '''Sub-repos must still be in a collection.'''
         self.assertFalse(self.checkInCollection('/trunk1/newrepo'))
+        
+    def testSubRepoInCollection(self):
+        self.assertTrue(self.checkInCollection('/trunk2/many/test1/newrepo'))
+        
+class RepoPathCreationTests(TempDirTestCase):
+    def setUp(self):
+        TempDirTestCase.setUp(self)
+        
+        import os.path
+        
+        self.collectiondir = self.make_temp_dir()
+        self.manycollectiondir = self.make_temp_dir()
+        self.tmprepo = self.make_temp_dir()
+        
+        self.paths = {
+                '/trunk2/short' : os.path.join(self.collectiondir, '*'),
+                '/trunk2/many' : os.path.join(self.manycollectiondir, '**'),
+                '/trunk1' : self.tmprepo
+        }
+        
+    def checkPath(self, path, conf_paths=None):
+        if conf_paths is None:
+            conf_paths = self.paths
+            
+        return local_path_for_repo(path, conf_paths)
+        
+    def testRootPath(self):
+        '''Local path for a non-configured repo returns None.'''
+        self.assertEqual(None, self.checkPath('/test1'))
+        
+    def testShallowContainedPath(self):
+        import os.path
+        self.assertEqual(os.path.join(self.collectiondir, 'test1'), self.checkPath('/trunk2/short/test1'))
+        
+    def testDeepContainedPath(self):
+        import os.path
+        self.assertEqual(os.path.join(self.collectiondir, 'test1', 'test2'), self.checkPath('/trunk2/short/test1/test2'))
+        
+    def testSubRepoPath(self):
+        import os.path
+        self.assertEqual(os.path.join(self.tmprepo, 'test1', 'test2'), self.checkPath('/trunk1/test1/test2'))
+        
+class SubRepoTests(TempDirTestCase):
+    def setUp(self):
+        TempDirTestCase.setUp(self)
+        
+        import os.path
+        
+        self.collectiondir = self.make_temp_dir()
+        self.manycollectiondir = self.make_temp_dir()
+        self.tmprepo = self.make_temp_dir()
+        
+        self.paths = {
+                '/trunk2/short' : os.path.join(self.collectiondir, '*'),
+                '/trunk2/many' : os.path.join(self.manycollectiondir, '**'),
+                '/trunk1' : self.tmprepo
+        }
+    
+    def testPathIsSubRepo(self):
+        self.assertTrue(path_is_subrepo('/trunk1/test1', self.paths))
+        self.assertTrue(path_is_subrepo('/trunk1/test1/test2', self.paths))
+    
+    def testPathIsRepo(self):
+        self.assertFalse(path_is_subrepo('/trunk1', self.paths))
+    
+    def testPathIsInCollection(self):
+        self.assertFalse(path_is_subrepo('/trunk2/short/howdy1', self.paths))
+        self.assertFalse(path_is_subrepo('/trunk2/many/howdy1', self.paths))
+        self.assertFalse(path_is_subrepo('/trunk2/many/howdy1/howdy2', self.paths))
+    
+    def testPathAtRoot(self):
+        self.assertFalse(path_is_subrepo('/', self.paths))
+        self.assertFalse(path_is_subrepo('/test1', self.paths))
