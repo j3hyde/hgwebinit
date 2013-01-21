@@ -43,7 +43,9 @@ def should_create_repo(obj, req):
     # is this a request for nested repos and hgwebs?
     repos = dict(obj.repos)
     virtualrepo = virtual
+    print 'repos: %s' % (repos,)
     while virtualrepo:
+        print 'path: %s in repos?' % (virtualrepo,)
         real = repos.get(virtualrepo)
         if real:
             return False
@@ -75,9 +77,6 @@ def should_create_repo(obj, req):
     # If we've made it this far then we need to create a repo
     
     return True
-
-    
-
     
 
 def hgwebinit_run_wsgi_wrapper(orig, obj, req):
@@ -165,7 +164,32 @@ def create_allowed(ui, req):
     return True
 
 
-
+def path_is_in_collection(path, conf_paths):
+    '''Checks if path is contained within a set of given collection paths.  A 
+    path is considered to be contained only if it is in a collection and only if
+    the configured collection depth is appropriate for the path given.
+    
+    >>>path_is_in_collection('/', ['/howdy'])
+    False
+    >>>path_is_in_collection('/howdy', ['/howdy'])
+    False
+    >>>path_is_in_collection('/howdy/hithere', ['/howdy/*'])
+    True
+    >>>path_is_in_collection('/howdy/hithere/hello', ['/howdy/*'])
+    False
+    >>>path_is_in_collection('/howdy/hithere/hello', ['/howdy/**'])
+    True
+    '''
+    for conf_path in conf_paths:
+        i = 0
+        if conf_path.endswith('/**'):
+            i = 2
+        elif conf_path.endswith('/*'):
+            i = 1
+        else:
+            return False
+        
+        return path.startswith(conf_path[:-i])
 
 
 
@@ -351,13 +375,13 @@ class RepoDetectionTests(TempDirTestCase):
         self.ui = UiMock(config=self.default_config)
         
         self.mod = ModuleMock(self.ui)
+        self.mod.repos = ['/trunk1']
     
     def tearDown(self):
         '''Teardown.'''
         TempDirTestCase.tearDown(self)
         
-    def testPath(self, path, mod=None, req=None):
-        print '%s, %s, %s, %s' % (self, path, mod, req)
+    def checkPath(self, path, mod=None, req=None):
         if mod is None:
             mod = self.mod
             
@@ -367,6 +391,13 @@ class RepoDetectionTests(TempDirTestCase):
         req.env['PATH_INFO'] = path
         return should_create_repo(mod, req)
     
+    def checkInCollection(self, path, ui=None):
+        if ui is None:
+            ui = self.ui
+        
+        return path_is_in_collection(path, ui.config['paths'])
+        
+    
     def testNonRepoPathRequests(self):
         '''Given a URL for static resources, ensure the extension returns
         without creating a repo.'''
@@ -374,7 +405,7 @@ class RepoDetectionTests(TempDirTestCase):
         
         
         # static requests (no)
-        self.assertFalse(self.testPath('/static/mystylesheet.css'))
+        self.assertFalse(self.checkPath('/static/mystylesheet.css'))
         
         req = RequestMock(env={
                           'REMOTE_USER': 'allow_user',
@@ -384,22 +415,22 @@ class RepoDetectionTests(TempDirTestCase):
                           form={
                                 'static': True
                           })
-        self.assertFalse(self.testPath('/', req=req))
+        self.assertFalse(self.checkPath('/', req=req))
         
         # top-level index request (no)
-        self.assertFalse(self.testPath('/'))
+        self.assertFalse(self.checkPath('/'))
         
         # repo request (no)
         m = ModuleMock(self.ui)
         repos = [('trunk/test1', '')]
         m.repos += repos
-        self.assertFalse(self.testPath('/trunk/test1/', mod=m))
+        self.assertFalse(self.checkPath('/trunk/test1/', mod=m))
         
         # repo subdir request (no)
         m = ModuleMock(self.ui)
         repos = ['trunk/test1']
         m.repos += repos
-        self.assertFalse(self.testPath('/trunk/test1/howdy.txt', mod=m))
+        self.assertFalse(self.checkPath('/trunk/test1/howdy.txt', mod=m))
     
     def testRepoPathRequest(self):
         '''Given a request for an existing Repo, ensure the extension returns 
@@ -425,23 +456,33 @@ class RepoDetectionTests(TempDirTestCase):
         '''Allow for creation of repos within collections.
         Note: This is relying on repo detection to prevent a new repo from being
         created at the location of an existing one.'''
-                
+        pass
         
         
-        # Don't create a new repo at /trunk
-        self.assertFalse(self.testPath('/trunk2'))
+    def testPathConflict(self):
+        # Don't create a new repo at /trunk2 - must be a subpath of a collection
+        #self.assertFalse(self.checkPath('/trunk2'))
+        self.assertFalse(self.checkInCollection('/trunk2'))
         
+    def testShallowChildOnShortCollection(self):
         # Do create a new repo at /trunk/short/test1
-        self.assertTrue(self.testPath('/trunk2/short/test1'))
+        #self.assertTrue(self.checkPath('/trunk2/short/test1'))
+        self.assertTrue(self.checkInCollection('/trunk2/short/test1'))
         
+    def testDeepChildOnShortCollection(self):
         # Do not create a new repo at /trunk/short/test2/test2
-        self.assertFalse(self.testPath('/trunk2/short/test2/test2'))
+        #self.assertFalse(self.checkPath('/trunk2/short/test2/test2'))
+        self.assertFalse(self.checkInCollection('/trunk2/short/test2/test2')) 
         
+    def testShallowChildOnDeepCollection(self):
         # Do create a new repo at /trunk/many/test3
-        self.assertTrue(self.testPath('/trunk2/many/test3'))
+        #self.assertTrue(self.checkPath('/trunk2/many/test3'))
+        self.assertTrue(self.checkInCollection('/trunk2/many/test3'))
         
+    def testDeepChildOnDeepCollection(self):
         # Do create a new repo at /trunk/many/test4/test4
-        self.assertTrue(self.testPath('/trunk2/many/test4/test4'))
+        #self.assertTrue(self.checkPath('/trunk2/many/test4/test4'))
+        self.assertTrue(self.checkInCollection('/trunk2/many/test4/test4'))
         
     def testCreateSubRepos(self):
         '''Allow for creation of sub-repos.'''
