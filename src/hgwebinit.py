@@ -25,10 +25,7 @@ def path_is_a_repo(ui, path):
 def should_create_repo(obj, req):   
     """Check if the requested repository exists and if this is a push request.
     """
-    
-    # we need to get the hgweb config so refresh first
-    obj.refresh()
-    
+        
     # Determine the need for creation
     virtual = req.env.get("PATH_INFO", "").strip('/')
     
@@ -88,14 +85,17 @@ def hgwebinit_run_wsgi_wrapper(orig, obj, req):
         ctype = tmpl('mimetype', encoding=encoding.encoding)
         ctype = templater.stringify(ctype)
         
+        obj.refresh()
+        
         # Do our stuff...
         if should_create_repo(obj, req):
             # Ah, but is this user allowed to create repos?
             if create_allowed(obj.ui, req):
                 virtual = req.env.get("PATH_INFO", "").strip('/') 
-                    
+                local = local_path_for_repo(virtual, dict(obj.repos))
+                
                 # init the repo
-                print 'TODO: create repo at path=%s' % virtual
+                print 'TODO: create repo at path=%s, %s' % (virtual, local)
                 #hg.repository(obj.ui, path=virtual, create=True)
                 # force refresh
                 obj.lastrefresh = 0    
@@ -496,7 +496,7 @@ class RepoDetectionTests(TempDirTestCase):
         '''For an otherwise acceptable, but non-push request, ensure the
         extension returns without creating a repo.'''
         self.assertTrue(False)
-        
+
     def testCreateOnCollection(self):
         '''Allow for creation of repos within collections.
         Note: This is relying on repo detection to prevent a new repo from being
