@@ -57,7 +57,10 @@ def should_create_repo(obj, req):
 
 
     # Check to ensure requested path is within configured collections.
-    if not path_is_in_collection(virtual, repos):
+    paths = {}
+    for name, value in obj.ui.configitems('paths'):
+        paths[name] = value
+    if not path_is_in_collection(virtual, paths):
         return False
 
     # Okay, but should we proceed?  (basically restrict to push requests)
@@ -91,16 +94,19 @@ def hgwebinit_run_wsgi_wrapper(orig, obj, req):
         if should_create_repo(obj, req):
             # Ah, but is this user allowed to create repos?
             if create_allowed(obj.ui, req):
-                virtual = req.env.get("PATH_INFO", "").strip('/') 
-                local = local_path_for_repo(virtual, dict(obj.repos))
+                virtual = req.env.get("PATH_INFO", "").strip('/')
+                
+                paths = {}
+                for name, value in obj.ui.configitems('paths'):
+                    paths[name] = value
+                 
+                local = local_path_for_repo(virtual, paths)
                 
                 # init the repo
-                print 'TODO: create repo at path=%s, %s' % (virtual, local)
-                #hg.repository(obj.ui, path=virtual, create=True)
+                hg.repository(obj.ui, path=local, create=True)
+                
                 # force refresh
                 obj.lastrefresh = 0    
-                # add it to hgwebdir_mod? or have them push again?
-                # obj.repos.append(virtual)
                 
     except ErrorResponse, err:
         req.respond(err, ctype)
@@ -128,9 +134,9 @@ def create_allowed(ui, req):
     user = req.env.get('REMOTE_USER')
     
     # enforce that you can only push using POST requests
-    if req.env['REQUEST_METHOD'] != 'POST':
-        msg = 'push requires POST request'
-        raise ErrorResponse(HTTP_METHOD_NOT_ALLOWED, msg)
+    #if req.env['REQUEST_METHOD'] != 'POST':
+    #    msg = 'push requires POST request' 
+    #    raise ErrorResponse(HTTP_METHOD_NOT_ALLOWED, msg)
 
     # require ssl by default for pushing, auth info cannot be sniffed
     # and replayed
@@ -197,6 +203,11 @@ def path_is_in_collection(path, conf_paths):
     
     @param conf_paths: A dictionary of virtual-paths to local filesystem paths.
     '''
+    
+    # Assume some root path (since the config is written that way)
+    if path[0] != '/':
+        path = '/' + path
+    
     # Check the path against each configured path.
     for virt in conf_paths:
         local = conf_paths[virt]
@@ -215,6 +226,9 @@ def path_is_in_collection(path, conf_paths):
 def local_path_for_repo(path, conf_paths):
     import os.path
     
+    if path[0] != '/':
+        path = '/' + path
+    
     for virt in conf_paths:
         local = conf_paths[virt]
         
@@ -227,11 +241,15 @@ def local_path_for_repo(path, conf_paths):
             local = local[:-3]
         elif local.endswith('*'):
             local = local[:-2]
-            
+        
         # Return the local path for the virtual one
+        # Basically just remove the collection root from the virtual path and
+        # replace it with the collection's local path
         if path.startswith(virt):
             p = os.path.normpath(path)
-            l = p.replace(os.path.normpath(virt), local, 1)
+            v = os.path.normpath(virt)
+            local = os.path.normpath(local)
+            l = p.replace(v, local, 1)
             return l
       
     # After checking all the configured collections, there was no match  
