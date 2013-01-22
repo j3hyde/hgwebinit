@@ -12,7 +12,7 @@ setup(
     name='hgwebinit',
     version='0.1.0dev',
     description='Mercurial hgweb init support.',
-    long_description=read('README.md'),
+    long_description=read('README.rst'),
     author='Jeffrey Kyllo',
     author_email='jkyllo@echospiral.com',
     url='https://bitbucket.org/j3hyde/hgwebinit',
@@ -28,5 +28,6 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Topic :: Software Development :: Version Control',
+        'Platform :: Any',
     ]
 )

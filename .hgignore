@@ -3,3 +3,5 @@ src/*.pyc
 *~
 hgweb_init.egg-info
 build
+hgwebinit.egg-info
+dist
