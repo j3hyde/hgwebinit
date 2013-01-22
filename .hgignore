@@ -1,0 +1,5 @@
+syntax: glob
+src/*.pyc
+*~
+hgweb_init.egg-info
+build
