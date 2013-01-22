@@ -9,7 +9,7 @@ def read(fname):
 
 setup(name='hgweb-init',
       version='0.1.0dev',
-      description='Mercurial hgweb init support',
+      description='Mercurial hgweb init support.',
       long_description=read('README.md'),
       author='Jeffrey Kyllo',
       author_email='jkyllo@echospiral.com',
