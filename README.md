@@ -20,11 +20,11 @@ Installation and Configuration
 ------------------------------
 Install hgwebinit using the CheeseShop:
 
-	$ easy_install hgwebinit
+	easy_install hgwebinit
 
 or:
 
-	$ pip install hgwebinit
+	pip install hgwebinit
 
 This will download the current version of hgwebinit and get you ready.  Next you
 will want to configure your hgweb installation to also use hgwebinit.  Here is
