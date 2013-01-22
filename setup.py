@@ -7,13 +7,25 @@ from setuptools import setup
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
-setup(name='hgweb-init',
-      version='0.1.0dev',
-      description='Mercurial hgweb init support.',
-      long_description=read('README.md'),
-      author='Jeffrey Kyllo',
-      author_email='jkyllo@echospiral.com',
-      url='https://bitbucket.org/j3hyde/hgwebinit',
-      packages=['hgwebinit'],
-      package_dir={'hgwebinit': 'src'}
-     )
+setup(
+    name='hgweb-init',
+    version='0.1.0dev',
+    description='Mercurial hgweb init support.',
+    long_description=read('README.md'),
+    author='Jeffrey Kyllo',
+    author_email='jkyllo@echospiral.com',
+    url='https://bitbucket.org/j3hyde/hgwebinit',
+    packages=['hgwebinit'],
+    package_dir={'hgwebinit': 'src'},
+    classifiers=[
+        'Development Status :: 1 - Planning',
+        'Environment :: Plugins',
+        'Intended Audience :: Developers',
+        'Intended Audience :: System Administrators',
+        'License :: OSI Approved :: GNU General Public License v2 or later (GPLv2+)',
+        'Natural Language :: English',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python',
+        'Topic :: Software Development :: Version Control',
+    ]
+)
