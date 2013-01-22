@@ -2,7 +2,7 @@
 hgwebinit
 =========
 
-``hgwebinit`` is a Mercurial extension for hgweb that allows for remote creation of 
+`hgwebinit` is a Mercurial extension for hgweb that allows for remote creation of 
 repositories.  At this time hgwebinit creates repositories implicitly if the 
 requesting user has permission to do so.  This can easily create repositories 
 unintentionally if the user simply misspells a repo or path.  The primary use 
@@ -21,11 +21,11 @@ and allow for more fine-grained authorization.
 Installation and Configuration
 ==============================
 
-Install ``hgwebinit`` from the Python Package Index using::
+Install `hgwebinit` from the Python Package Index using::
 
 	easy_install hgwebinit
 
-or, via ``pip``::
+or, via `pip`::
 
 	pip install hgwebinit
 
@@ -68,39 +68,39 @@ people are doing only things you have allowed them to do.
 Security: User permissions
 --------------------------
 
-The hgweb user has access to all the repositories and can't determine 
+The `hgweb` user has access to all the repositories and can't determine 
 permission.
 
-Hgweb handles read permissions already despite that it is running as www-data, 
-etc.  Given that you are using hgweb at all, file permissions have nothing to do
+`hgweb` handles read permissions already despite that it is running as www-data, 
+etc.  Given that you are using `hgweb` at all, file permissions have nothing to do
 with it.  What is needed is a permission model for repository creation in 
 addition to the current read.
 
 Security: User authentication/authorization
 -------------------------------------------
 
-Permissions are in the domain of the web server, not mercurial.
+Permissions are in the domain of the web server, not `mercurial`.
 
 Installations do leave authentication and some authorization to the web server 
-(typically Apache) but hgweb actually does do some authorization on its own.  It
+(typically `Apache`) but hgweb actually does do some authorization on its own.  It
 checks for the username of the authenticated user against the configured read 
-and push groups.  What mercurial lacks is a permission for init.
+and push groups.  What `mercurial` lacks is a permission for init.
 
 Complexity: Protocol
 --------------------
  
 It would be adding to the protocol.
 
-It would actually be bringing the HTTP protocol inline with what the SSH 
-protocol already allows.  The first implementation of hgwebinit simply creates 
+It would actually be bringing the HTTP protocol in line with what the SSH 
+protocol already allows.  The first implementation of `hgwebinit` simply creates 
 repositories implicitly.  This is actually somewhat scary but it's a first rev.  
 The elegant solution may be treat init as a line protocol capability.  Any peer 
 implementation can then be written to use that capability.
 
-Complexity: Scope creap
+Complexity: Scope creep
 -----------------------
 
-This basically boils down to "if hg did that then people would want all this 
+This basically boils down to "if `hg` did that then people would want all this 
 other stuff."
 
 First off, that's a great problem to have.  Secondly, that should be a 
@@ -108,5 +108,5 @@ conversation that is prevented or controlled through the dissemination of
 information.  For instance, what is the impetus of the implementation and what 
 is it designed to provide.  There are still many other options out there that 
 provide more elegant ways to get the job done.  However, this doesn't mean that 
-the baseline tool should have a blindspot compared to other parts of its own 
-implementation (e.g. SSH peer).
+the baseline tool should have a blind spot compared to other parts of its own 
+implementation (e.g. `SSH` peer).
