@@ -2,6 +2,7 @@
 
 #mercurial hgweb support for repository creation.
 
+import os.path
 from setuptools import setup
 
 def read(fname):
