@@ -2,8 +2,8 @@
 hgwebinit
 =========
 
-`hgwebinit` is a Mercurial extension for hgweb that allows for remote creation of 
-repositories.  At this time hgwebinit creates repositories implicitly if the 
+`hgwebinit` is a Mercurial extension for hgweb that allows for remote creation
+of repositories.  At this time hgwebinit creates repositories implicitly if the 
 requesting user has permission to do so.  This can easily create repositories 
 unintentionally if the user simply misspells a repo or path.  The primary use 
 is for creating new repositories within collections but it is not currently 
@@ -21,7 +21,12 @@ and allow for more fine-grained authorization.
 Installation and Configuration
 ==============================
 
-Install `hgwebinit` from the Python Package Index using::
+`hgwebinit` is available on bitbucket (primary) and github (mirror):
+
+* https://bitbucket.org/j3hyde/hgwebinit
+* https://github.com/j3hyde/hgwebinit
+
+`hgwebinit` may be installed from the Python Package Index using::
 
 	easy_install hgwebinit
 
@@ -29,9 +34,9 @@ or, via `pip`::
 
 	pip install hgwebinit
 
-This will download the current version of hgwebinit and get you ready.  Next you
-will want to configure your hgweb installation to also use hgwebinit.  Here is
-an hgweb.ini for example::
+This will download the current version of `hgwebinit` and get you ready.  Next
+you will want to configure your hgweb installation to also use hgwebinit.  Here
+is an `hgweb.ini` for example::
 
 	[paths]
 	/trunk=/repos/*
