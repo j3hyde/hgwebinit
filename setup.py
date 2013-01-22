@@ -1,22 +1,16 @@
 #!/usr/bin/env python
 
-
 #mercurial hgweb support for repository creation.
 
-#defining features:
-# * Add configurations for create_allowed permission
-# * Create a repository when none exists (if the user has permission)
-# * Hook into hgweb check_authnz for create_allowed permission
-# * Handle 404 for incoming changesets.
-
-
-
-
 from setuptools import setup
+
+def read(fname):
+    return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 setup(name='hgweb-init',
       version='1.0dev',
       description='Mercurial hgweb init support',
+      long_description=read('README.md'),
       author='Jeffrey Kyllo',
       author_email='jkyllo@echospiral.com',
       url='https://echospiral.com/trac/hgweb-init',
