@@ -102,8 +102,9 @@ def hgwebinit_run_wsgi_wrapper(orig, obj, req):
                  
                 local = local_path_for_repo(virtual, paths)
                 
-                # init the repo
-                hg.repository(obj.ui, path=local, create=True)
+                if obj.ui.configbool('web', 'implicit_init', False):
+                    # init the repo
+                    hg.repository(obj.ui, path=local, create=True)
                 
                 # force refresh
                 obj.lastrefresh = 0    
