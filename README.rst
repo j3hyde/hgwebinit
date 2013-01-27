@@ -45,6 +45,7 @@ is an *hgweb.ini* for example::
 	allow_push = *
 	push_ssl = false
 	allow_create = *
+	implicit_init = true
 
 	[extensions]
 	hgwebinit=
@@ -55,8 +56,8 @@ denied.  In the above configuration, all users are allowed to create new
 repositories.  Set *allow_create* to a list of users a la *allow_push* to let 
 those users create new repositories.
 
-Responses to common objections
-==============================
+Security and Implementation Considerations
+==========================================
 Although there are security implications in doing this, they are not the ones 
 that most people think of.  When searching for ways to create repositories 
 remotely you are presented a couple options.  One is to use hg via ssh.  The 
@@ -66,52 +67,104 @@ are almost always confronted with the answer of "you can't do that because it
 would be insecure."
 
 Please understand that whenever you put a server up on the Internet you must be
-conscious of security.  The mechanisms in place here are useful but not
-complete.  Please take precautions to lock down your server and ensure the right
-people are doing only things you have allowed them to do. 
+conscious of security.  The mechanisms provided by this extension are useful but
+not complete.  Please take precautions to lock down your server and ensure the
+right people are doing only things you have allowed them to do. 
 
-Security: User permissions
---------------------------
+Security: User permissions (authorization)
+------------------------------------------
 
-The *hgweb* user has access to all the repositories and can't determine 
-permission.
+*hgweb* runs as the web server user (e.g. www-data under many Apache
+configurations) and file system-level permissions are only checked for that
+user.  *hgweb* then does some permissions processing on top of that.
 
-*hgweb* handles read permissions already despite that it is running as www-data, 
-etc.  Given that you are using *hgweb* at all, file permissions have nothing to do
-with it.  What is needed is a permission model for repository creation in 
-addition to the current read.
+*hgweb* handles read and push permissions on a per-user basis given that the
+user was authenticated at all.  What is needed is a permission model for
+repository creation in addition to the current read and push permissions.  This
+extension adds a configuration for *allow_create* and *deny_create*.  These are
+similar to the existing *allow_push* and *deny_push* configurations.  In fact,
+at present a user must have both read and create permission in order to create
+a repository implicitly.
 
-Security: User authentication/authorization
--------------------------------------------
+Note that when considering user permissions it is important to recognize the
+roll of *hgweb*.  When using a repository via SSH or locally, authorization is
+delegated to the file system on which the repository is stored.  If the user
+cannot use hg to read/write the repository then that is it - mission failed.
 
-Permissions are in the domain of the web server, not *mercurial*.
+In the case  of *hgweb*, relying on file system permissions is insufficient.
+Instead *hgweb* implements its read and push permissions.  *hgweb* is acting as
+an authorization layer for *hy*.  This is an important distinction because it is
+unique to repositories hosted for HTTP access.  For that reason, *hgwebinit*
+includes permission for initializing a new repository.
 
-Installations do leave authentication and some authorization to the web server 
-(typically *Apache*) but hgweb actually does do some authorization on its own.  It
-checks for the username of the authenticated user against the configured read 
-and push groups.  What *mercurial* lacks is a permission for init.
+Lastly consider that a user who is accessing a repository locally (this also
+applies to many SSH-based cases) has more access to the repository than they
+would when accessing that same repository via HTTP.  In particular, *hgweb*
+provides no method that would destroy information in the repository.  An
+authenticated user can push new information and can read existing information
+but they cannot remove commits or delete the repository.  Conversely any user
+with file-system permissions to the repository can actually delete it entirely.
+In this sense *hgweb* actually provides more protection for the repository.  
 
-Complexity: Protocol
---------------------
- 
-It would be adding to the protocol.
+Security: User identity (authentication)
+----------------------------------------
 
-It would actually be bringing the HTTP protocol in line with what the SSH 
-protocol already allows.  The first implementation of *hgwebinit* simply creates 
-repositories implicitly.  This is actually somewhat scary but it's a first rev.  
-The elegant solution may be treat init as a line protocol capability.  Any peer 
-implementation can then be written to use that capability.
+When using a remote repository it is important to consider that the 
+authenticated user may not be the one identified in the commit log.  This is 
+true of *mercurial* in general and is not specific to *hgweb* or *hgwebinit*.
+Consider that authenticating via SSH gives someone full access to the
+repository.  They can then commit using whatever name and email they wish.  If
+this poses major risk for your project or organization then please consider the
+extension for *mercurial* that allows for signing commits using gpg.
+Alternatively an extension that verifies that the commit identity matches the
+authenticated user would be quite handy.
 
-Complexity: Scope creep
------------------------
+Side Effects
+------------
+In the current state *hgwebinit* allows for creating new repositories but does
+so implicitly.  When a properly authorized user tries to push to or read from a
+path that doesn't match a repository, a new repository is created on the fly.
+The requested operation is then completed as normal.  This means that any
+properly authorized user who misspells a repository path is going to create a
+new repository.
 
-This basically boils down to "if *hg* did that then people would want all this 
-other stuff."
+This comes back to the topic of destructive edits because removing the
+problematic repository is now necessary.  With direct repository access one can
+simply delete it.  Allowing such destructive access from the Internet is
+probably not wise and it is not the intent of this extension to allow such
+actions.  Repairing that situation should be handled by someone with sufficient
+repository access.
 
-First off, that's a great problem to have.  Secondly, that should be a 
-conversation that is prevented or controlled through the dissemination of 
-information.  For instance, what is the impetus of the implementation and what 
-is it designed to provide.  There are still many other options out there that 
-provide more elegant ways to get the job done.  However, this doesn't mean that 
-the baseline tool should have a blind spot compared to other parts of its own 
-implementation (e.g. *SSH* peer).
+Roadmap
+=======
+
+Protocol Complexity
+-------------------
+
+The roadmap for this extension includes an addition to the hg protocol in order
+to support explicit creation of repositories.  In other words, we want a user
+with this extension installed to be able to type
+**hg init https://server.com/remote_repo**, get authenticated and authorized and
+end up with a new repository, just as they asked.
+
+Although this adds to the HTTP protocol it would essentially close a feature gap
+when compared to the functionality afforded by SSH connections.  Consider that
+a user with sufficient file system permissions is able to initialize a new
+repository anywhere.
+
+Hg Scope Creep
+--------------
+
+The issue with adding commands an functionality like this is that it could open
+a door for new feature requests.
+
+First consider that it would be a great problem to have.  Users desiring 
+functionality either provides input to Hg developers or provides ideas for
+extension authors.
+
+Secondly, that scope creep could be prevented or controlled through the
+dissemination of information.  The goal of *hgwebinit* is essentialy to gain
+parity with the SSH implementation while retaining a reasonable level of
+security.  Given that, other crazy-cool authorization mechanisms are outside the
+scope of this extension and should be considered for development as new
+projects.
