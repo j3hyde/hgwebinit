@@ -10,7 +10,7 @@ def read(fname):
 
 setup(
     name='hgwebinit',
-    version='0.1.0',
+    version='0.2.0dev',
     description='Mercurial hgweb init support.',
     long_description=read('README.rst'),
     author='Jeffrey Kyllo',
