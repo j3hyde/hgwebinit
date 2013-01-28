@@ -17,6 +17,9 @@ from mercurial.hgweb import hgwebdir_mod, protocol
 from mercurial.hgweb.common import ErrorResponse, HTTP_UNAUTHORIZED
 from mercurial.hgweb.common import HTTP_METHOD_NOT_ALLOWED, HTTP_FORBIDDEN
 
+testedwith = '2.4.2'
+buglink = 'https://www.bitbucket.org/j3hyde/hgwebinit/issues'
+
 def should_create_repo(obj, req):   
     """Check if the requested repository exists and if this is a push request.
     """
