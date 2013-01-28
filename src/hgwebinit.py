@@ -11,16 +11,11 @@ import shutil
 import tempfile
 import unittest
 
-from mercurial import hg, extensions, encoding, templater
-from mercurial.hgweb import hgwebdir_mod
+from mercurial.i18n import _
+from mercurial import hg, extensions, encoding, templater, wireproto, httppeer, ui
+from mercurial.hgweb import hgwebdir_mod, protocol
 from mercurial.hgweb.common import ErrorResponse, HTTP_UNAUTHORIZED
 from mercurial.hgweb.common import HTTP_METHOD_NOT_ALLOWED, HTTP_FORBIDDEN
-
-def getLocalPathForVirtual(ui, path):
-    pass
-
-def path_is_a_repo(ui, path):
-    pass
 
 def should_create_repo(obj, req):   
     """Check if the requested repository exists and if this is a push request.
@@ -49,12 +44,10 @@ def should_create_repo(obj, req):
             break
         virtualrepo = virtualrepo[:up]
 
-        
     # is this a request for subdirectories?
     subdir = virtual + '/'
     if [r for r in repos if r.startswith(subdir)]:
         return False
-
 
     # Check to ensure requested path is within configured collections.
     paths = {}
@@ -63,20 +56,20 @@ def should_create_repo(obj, req):
     if not path_is_in_collection(virtual, paths):
         return False
 
-    # Okay, but should we proceed?  (basically restrict to push requests)
-    # Push will do:
-    #  * capabilities
-    #  * heads
-    #  * known nodes
-    #  * list_keys (namespace=phases)
-    #  * list_keys (namespace=bookmarks)
-    
-    # our capabilities are pretty much just unbundle until created...?    
-    
-    # If we've made it this far then we need to create a repo
-    
+    # If we've made it this far then it makes sense to create a repo
     return True
-    
+
+class emptyrepo(object):
+    '''Provide an empty repo for basic protocol methods.  Basically just retains
+    a ui object.'''
+    def __init__(self, baseui=None):
+        if baseui == None:
+            baseui = ui.ui()
+        self.ui = baseui
+        self.requirements = set()
+        self.supportedformats = set()
+    def filtered(self, *args, **kwargs):
+        return self
 
 def hgwebinit_run_wsgi_wrapper(orig, obj, req):
     """Handles hgwebdir_mod requests, looking for pushes to non-existent repos.
@@ -103,8 +96,15 @@ def hgwebinit_run_wsgi_wrapper(orig, obj, req):
                 local = local_path_for_repo(virtual, paths)
                 
                 if obj.ui.configbool('web', 'implicit_init', False):
-                    # init the repo
+                    # Go ahead and init if implicit creation is enabled
                     hg.repository(obj.ui, path=local, create=True)
+                else:
+                    # Find out what the client wants.
+                    # Only the capabilities and init commands are supported.
+                    cmd = req.form.get('cmd', [''])[0]
+                    if protocol.iscmd(cmd) and cmd in ('capabilities', 'init'):
+                        repo = emptyrepo(baseui=obj.ui)
+                        return protocol.call(repo, req, cmd)
                 
                 # force refresh
                 obj.lastrefresh = 0    
@@ -116,10 +116,56 @@ def hgwebinit_run_wsgi_wrapper(orig, obj, req):
     # Now hand off the request to the next handler (likely hgwebdir_mod)
     return orig(obj, req)
 
+def http_peer_instance(orig, ui, path, create):
+    '''A wrapper for hg.httppeer.instance that supports creating repositories.'''
+    if create:
+        if path.startswith('https:'):
+            inst = httppeer.httpspeer(ui, path)
+        else:
+            inst = httppeer.httppeer(ui, path)
+        inst.requirecap('init', _('repo init'))
+        inst._call('init')
+    else:
+        inst = orig(ui, path, create)
+    
+    return inst
+
+def hgproto_init(repo, proto):
+    '''An hg protocol command handler that creates a new repository.  This gets
+    bound to the 'init' command.'''
+    virtual = proto.req.env.get("PATH_INFO", "").strip('/')
+                
+    paths = {}
+    for name, value in repo.ui.configitems('paths'):
+        paths[name] = value
+     
+    local = local_path_for_repo(virtual, paths)
+    hg.repository(repo.ui, path=local, create=True)
+
+def hgproto_capabilities(orig, repo, proto):
+    '''A wrapper for hg.wireproto.capabilities that splices in 'init' as a
+    supported capability.  Note that this only means the server is capable.  It
+    is still possible for a client to get an error if the path is not supported.
+    '''
+    caps = orig(repo, proto)
+    caps = ' '.join((caps, 'init'))
+    return caps
+
 def uisetup(ui):
     '''Hooks into hgwebdir_mod's run_wsgi method so that we can listen for
     requests.'''
+    # wrap hgwebdir_mod so that we can handle creation
     extensions.wrapfunction(hgwebdir_mod.hgwebdir, 'run_wsgi', hgwebinit_run_wsgi_wrapper)
+    
+    # wrap up caps
+    extensions.wrapfunction(wireproto, 'capabilities', hgproto_capabilities)
+    
+    # Need to reset the capabilities command to use our newly set up wrapper    
+    wireproto.commands['capabilities'] = (wireproto.capabilities, '')
+    wireproto.commands['init'] = (hgproto_init, '')
+
+    # wrap http client to include ability to create
+    extensions.wrapfunction(httppeer, 'instance', http_peer_instance) 
 
 def create_allowed(ui, req):
     '''Check allow_create and deny_create config options of a repo's ui object
@@ -168,6 +214,9 @@ def create_allowed(ui, req):
 
 
 def path_is_subrepo(path, conf_paths):
+    '''Checks, in a basic fashion, whether the given path is considered to be
+    a sub-repository.  This check is based solely on the hgweb-configured paths
+    and does not verify actual repository structure.'''
     for virt in conf_paths:
         local = conf_paths[virt]
         
@@ -225,6 +274,8 @@ def path_is_in_collection(path, conf_paths):
     return False
 
 def local_path_for_repo(path, conf_paths):
+    '''Determines the local file system path based on a given virtual (url) path
+    and the hgweb path configuration.'''
     import os.path
     
     if path[0] != '/':
