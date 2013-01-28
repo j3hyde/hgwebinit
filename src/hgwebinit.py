@@ -1,11 +1,11 @@
 # Licensed under the GPL v2 in accordance with the Mercurial license.
 # Copyright 11 January 2013 Jeffrey Kyllo <jkyllo@echospiral.com>
 
-'''An extension for hgweb that allows for repository creation.  Since the hg
-wire protocol does not currently have support for doing remote init via HTTP,
-this extension instead watches for push requests to non-existent repositories
-and prompts the (duely authorized) user to create it.  Following that the push
-continues as expected.'''
+'''An extension for hgweb that allows for repository creation.
+Since the hg wire protocol does not currently have support for doing remote init
+via HTTP, this extension instead watches for push requests to non-existent
+repositories and prompts the (duely authorized) user to create it.  Following
+that the push continues as expected.'''
 
 import shutil
 import tempfile
